@@ -98,3 +98,41 @@ A user has long-term credentials — password, access keys — and represents a 
 - [ ] I understand the lifecycle policy and what it does to data over time.
 
 Check the boxes honestly. Anything unchecked is worth 10 minutes of re-reading before Week 2.
+
+## Phase 2 Day 2 — PySpark Bronze to Silver transformation
+
+**What I built:**
+- A PySpark transformation job (transformations/spark_jobs/bronze_to_silver.py) reading Bronze JSONL, cleaning/typing/deduplicating, and writing partitioned Parquet.
+- Set up local Spark (Java 17 + pyspark 3.5.1) for free, fast iteration before deploying to Glue.
+- Verified output: ~Nx smaller than JSON despite adding 5 derived columns.
+
+**Concepts locked in:**
+- Explicit schema beats inference: faster, deterministic, catches bad data. Inference requires a full scan and can guess types wrong.
+- partitionBy writes Hive-style partitions and removes partition columns from file contents (encoded in path instead).
+- _SUCCESS marker file signals job completion to downstream tools.
+- dropDuplicates on a unique key = idempotency; the pipeline is safe to re-run.
+- Separating transform() (pure, no IO) from main() (IO) makes the logic unit-testable.
+- Snappy compression: fast, good ratio, the default choice for Parquet.
+
+**Why local-first:** Glue costs money and is slow to iterate. Develop locally with a data sample, deploy to Glue once the logic is right. This is standard professional practice.
+
+**Interview answers:**
+
+*Q: Walk me through a transformation job you've written.*
+- Read raw JSON with an explicit schema (no inference — deterministic and faster).
+- Parse timestamps, derive date/hour columns for partitioning and analysis.
+- Precompute boolean flags (is_error) so downstream queries are simpler.
+- Apply data-quality filters dropping rows with null critical fields.
+- Deduplicate on event_id for idempotency.
+- Write partitioned Parquet (by date and service) with snappy compression.
+
+*Q: Why Parquet over JSON for the cleaned tier?*
+- Columnar: queries read only needed columns (column pruning).
+- Row-group statistics enable predicate pushdown (skip non-matching chunks).
+- 3-5x compression even while adding columns.
+- Result: dramatically cheaper and faster analytical queries.
+
+*Q: How do you make a pipeline idempotent?*
+- Deduplicate on a stable unique key (event_id) so re-runs don't create duplicates.
+- Use overwrite mode on partitions so re-processing a partition replaces rather than appends.
+- Deterministic transformations: same input always yields same output.
