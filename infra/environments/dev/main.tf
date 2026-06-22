@@ -54,3 +54,10 @@ output "silver_bucket" {
 output "gold_bucket" {
   value = module.data_lake.gold_bucket
 }
+output "glue_job_name" {
+  value = module.data_lake.glue_job_name
+}
+
+output "glue_database" {
+  value = module.data_lake.glue_database
+}
