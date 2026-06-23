@@ -61,3 +61,7 @@ output "glue_job_name" {
 output "glue_database" {
   value = module.data_lake.glue_database
 }
+output "silver_crawler_name" {
+  value = module.data_lake.silver_crawler_name
+}
+

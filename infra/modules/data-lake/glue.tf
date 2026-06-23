@@ -103,3 +103,38 @@ output "glue_database" {
   value       = aws_glue_catalog_database.main.name
   description = "Glue Catalog database name"
 }
+
+# -------------------- Glue Crawler for the Silver tier --------------------
+
+# The crawler scans Silver Parquet, infers the schema, detects the
+# event_date and service partitions, and registers a table in the Catalog.
+resource "aws_glue_crawler" "silver" {
+  name          = "${var.project}-silver-crawler-${var.environment}"
+  role          = aws_iam_role.glue.arn
+  database_name = aws_glue_catalog_database.main.name
+
+  s3_target {
+    path = "s3://${aws_s3_bucket.silver.id}/silver/"
+  }
+
+  # When the schema changes, update the catalog; when partitions/files
+  # are deleted, just log it rather than dropping the table.
+  schema_change_policy {
+    update_behavior = "UPDATE_IN_DATABASE"
+    delete_behavior = "LOG"
+  }
+
+  # Group compatible schemas into a single table rather than creating
+  # one table per partition.
+  configuration = jsonencode({
+    Version = 1.0
+    Grouping = {
+      TableGroupingPolicy = "CombineCompatibleSchemas"
+    }
+  })
+}
+
+output "silver_crawler_name" {
+  value       = aws_glue_crawler.silver.name
+  description = "Name of the Silver tier crawler"
+}
