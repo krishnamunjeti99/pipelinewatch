@@ -136,3 +136,94 @@ Check the boxes honestly. Anything unchecked is worth 10 minutes of re-reading b
 - Deduplicate on a stable unique key (event_id) so re-runs don't create duplicates.
 - Use overwrite mode on partitions so re-processing a partition replaces rather than appends.
 - Deterministic transformations: same input always yields same output.
+
+## Phase 2 Day 4 — Crawler + Athena: the data lake becomes queryable
+
+**What I built:**
+- Glue Crawler (Terraform) that scans Silver Parquet, infers schema, detects event_date/service partitions, and registers a table in the Glue Catalog.
+- Configured Athena query result location.
+- Ran first SQL queries against the Silver table.
+
+**Concepts locked in:**
+- A crawler turns S3 files into a queryable table by registering schema + partitions in the Catalog. Without it, Athena doesn't know the data exists.
+- Partition keys (event_date, service) become filterable columns even though they live in the folder path, not the files.
+- Athena = serverless Presto/Trino over S3, using the Glue Catalog as metastore. $5/TB scanned.
+- "Data scanned" = cost. Column pruning (Parquet) and partition pruning (WHERE on partition keys) both reduce it.
+- Crawler has a 10-min minimum charge (~$0.15/run) — don't run it in a loop.
+
+**The payoff:** P95 latency by service across the entire dataset, in ~2 seconds, as one SQL query. Same analysis done manually with grep earlier took 20 minutes for one hour of one service.
+
+**Interview answers:**
+
+*Q: How does data in S3 become queryable with SQL?*
+- A crawler (or manual DDL) registers the schema, partitions, format, and location in the Glue Data Catalog.
+- Athena reads the catalog to know the table's structure and where its files live.
+- Athena's Presto engine reads the Parquet from S3 in parallel and runs the SQL.
+- Storage (S3) and compute (Athena) are fully separated.
+
+*Q: How do you reduce Athena query cost?*
+- Use columnar Parquet so queries read only needed columns (column pruning).
+- Partition on commonly-filtered dimensions so queries scan only relevant prefixes (partition pruning).
+- Select specific columns, not SELECT *.
+- Use compression and avoid many small files.
+- Materialize hot aggregates with CTAS.
+
+*Q: What's the role of the Glue Data Catalog?*
+- Central metadata store: schema, partition keys, file format, S3 location per table.
+- Shared by Athena, Redshift Spectrum, EMR, Glue, and external tools.
+- The single integration point that makes a lakehouse work.
+
+## Phase 2 wrap-up — Silver tier complete: the data lake is queryable
+
+**What I built across Phase 2**
+
+A complete Bronze → Silver → queryable pipeline:
+- PySpark transformation (developed and tested locally, deployed to AWS Glue 5.0) that cleans, types, deduplicates, and enriches raw JSON into partitioned Parquet.
+- Glue infrastructure in Terraform: IAM role, Glue Catalog database, script upload, Glue job, Glue crawler.
+- Silver tier: partitioned Parquet (event_date, service), ~Nx smaller than the Bronze JSON.
+- Glue Catalog table registered by the crawler, queryable via Athena.
+- A library of analytical SQL: error rates, P95/P99 latency, traffic by hour, top users, window functions, CTEs, ranking.
+
+**Concepts truly locked in**
+
+- Local-first development: build/test Spark locally (free, fast), deploy to Glue (paid, managed). Identical transform() logic both places.
+- Glue jobs are ephemeral (no idle cost); Dev Endpoints/Interactive Sessions are not (bill shock risk).
+- Glue 5.0 = Spark 3.5.4 + Python 3.11; matched my local Spark so code ported unchanged.
+- Parquet columnar format: column pruning + predicate pushdown + compression = dramatically cheaper queries.
+- The crawler registers schema AND specific partitions in the Catalog; Athena reads partition lists from the Catalog, not S3.
+- New data isn't auto-visible: must re-crawl, MSCK REPAIR TABLE, or use partition projection (the scalable answer).
+- Crawlers infer partition columns as varchar — event_date came through as string, not date.
+- Athena = serverless Presto over S3; $5/TB scanned; "data scanned" IS the cost.
+- Window functions (SUM/RANK/ROW_NUMBER OVER PARTITION BY ORDER BY), CTEs, self-joins — the analytical SQL interviewers test.
+
+**Gotchas I hit**
+
+- Duplicate Terraform outputs (module vs root) — module outputs reference resources, root outputs reference the module.
+- event_date registered as varchar by the crawler — comparing to DATE literal failed; fix with string comparison (still prunes) or CAST (can defeat pruning).
+- VS Code WSL save "Canceled" glitch — reload window or write from terminal.
+
+**The Phase 2 payoff**
+
+P95 latency by service across the entire dataset, as one SQL query, in ~2 seconds. The same analysis done manually with grep in Phase 1 took 20 minutes for one hour of one service. This is why the medallion architecture exists.
+
+**Interview answers I can now give**
+
+*Q: Walk me through an ETL pipeline you've built.*
+Raw JSON application logs land in an S3 Bronze tier, partitioned by service and hour. A PySpark job on AWS Glue reads them with an explicit schema, parses timestamps, derives analytical columns, applies data-quality filters, deduplicates on a unique key for idempotency, and writes partitioned Parquet to a Silver tier. A Glue crawler registers the schema and partitions in the Data Catalog, making the data queryable through Athena with standard SQL. Everything is provisioned in Terraform.
+
+*Q: Why convert JSON to Parquet?*
+Columnar storage enables column pruning and predicate pushdown, and compresses 3-5x better. On Athena, which bills per terabyte scanned, this cuts query cost by an order of magnitude while making queries faster.
+
+*Q: How does new data become visible to Athena?*
+Athena reads the partition list from the Glue Catalog, so new partitions aren't automatically visible. Options: re-run the crawler (convenient), MSCK REPAIR TABLE (manual), or partition projection (computes partition locations from a pattern — the scalable production answer).
+
+*Q: Difference between ROW_NUMBER, RANK, and DENSE_RANK?*
+ROW_NUMBER assigns unique sequential numbers regardless of ties. RANK gives tied rows the same rank but leaves gaps afterward. DENSE_RANK gives tied rows the same rank with no gaps.
+
+**Phase 2 self-assessment**
+- [ ] I can explain why Parquet is cheaper to query than JSON.
+- [ ] I can deploy a PySpark job to Glue and explain the wrapper boilerplate.
+- [ ] I understand why new data isn't auto-visible to Athena and the three fixes.
+- [ ] I can write a window function and explain PARTITION BY / ORDER BY / frame.
+- [ ] I can explain the crawler's role and why it inferred event_date as varchar.
+- [ ] I could rebuild this entire pipeline in a fresh AWS account from my Terraform.
