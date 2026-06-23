@@ -1,0 +1,30 @@
+name: 'pipelinewatch'
+version: '1.0.0'
+config-version: 2
+
+# Which connection profile (defined in ~/.dbt/profiles.yml) to use
+profile: 'pipelinewatch'
+
+# Where dbt looks for each type of file
+model-paths: ["models"]
+snapshot-paths: ["snapshots"]
+macro-paths: ["macros"]
+seed-paths: ["seeds"]
+test-paths: ["tests"]
+analysis-paths: ["analyses"]
+
+# Build artifacts go here (gitignored)
+target-path: "target"
+clean-targets:
+  - "target"
+  - "dbt_packages"
+
+# Default materializations by folder:
+#   staging models -> views (cheap, just clean the source)
+#   marts models   -> tables (materialized Parquet, fast to query)
+models:
+  pipelinewatch:
+    staging:
+      +materialized: view
+    marts:
+      +materialized: table

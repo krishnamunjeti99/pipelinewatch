@@ -24,3 +24,9 @@ credentials
 # OS
 .DS_Store
 .envrc
+
+# dbt
+.dbt-venv/
+transformations/dbt/target/
+transformations/dbt/logs/
+transformations/dbt/dbt_packages/

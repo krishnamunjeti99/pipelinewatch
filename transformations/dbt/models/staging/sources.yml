@@ -1,0 +1,10 @@
+version: 2
+
+sources:
+  - name: lakehouse
+    description: "The PipelineWatch lakehouse, catalogued in Glue."
+    database: awsdatacatalog          # the Athena catalog
+    schema: pipelinewatch_dev         # the Glue database holding Silver
+    tables:
+      - name: silver
+        description: "Cleaned, typed, partitioned event data from the Silver tier."
