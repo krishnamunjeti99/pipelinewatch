@@ -1,0 +1,8 @@
+snapshots:
+  - name: users_snapshot
+    relation: ref('seed_users')
+    config:
+      strategy: check          # detect changes by comparing columns
+      unique_key: user_id      # how dbt matches a row across runs
+      check_cols: ['plan', 'country']   # watch these for changes
+      table_type: iceberg      # REQUIRED on Athena: SCD2 needs row updates
