@@ -1,0 +1,42 @@
+version: 2
+
+models:
+  - name: mart_service_hourly_kpis
+    description: >
+      Hourly service health metrics: request volume, error counts and rate,
+      latency percentiles (p50/p95/p99), and unique users. One row per
+      (service, date, hour). The primary mart powering service dashboards.
+    columns:
+      - name: service
+        description: "The microservice name."
+        tests:
+          - not_null
+      - name: total_requests
+        description: "Total requests in this service/date/hour bucket."
+        tests:
+          - not_null
+      - name: error_rate_pct
+        description: "Percent of requests with status >= 400."
+
+  - name: mart_daily_active_users
+    description: "Distinct active users and request volume per service per day."
+    columns:
+      - name: event_date
+        description: "The calendar date (partition value, string)."
+        tests:
+          - not_null
+      - name: active_users
+        description: "Count of distinct user_ids active that day for the service."
+        tests:
+          - not_null
+
+  - name: mart_error_analytics
+    description: "Error breakdown by service, endpoint, and status code."
+    columns:
+      - name: service
+        tests:
+          - not_null
+      - name: error_count
+        description: "Number of error responses for this group."
+        tests:
+          - not_null

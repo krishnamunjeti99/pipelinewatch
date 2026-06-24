@@ -1,0 +1,19 @@
+version: 2
+
+models:
+  - name: stg_events
+    description: "Light standardization over the Silver tier. One row per event."
+    columns:
+      - name: event_id
+        description: "Globally unique event identifier."
+        tests:
+          - unique
+          - not_null
+      - name: service
+        description: "The microservice that handled the request."
+        tests:
+          - not_null
+      - name: status_code
+        description: "HTTP response status code."
+        tests:
+          - not_null
