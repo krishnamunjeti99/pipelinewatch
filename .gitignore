@@ -30,3 +30,6 @@ credentials
 transformations/dbt/target/
 transformations/dbt/logs/
 transformations/dbt/dbt_packages/
+
+# Orchestration: dbt deployment copy (canonical lives in transformations/dbt)
+orchestration/include/dbt/

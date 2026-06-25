@@ -1,11 +1,8 @@
 """
-PipelineWatch core pipeline.
+PipelineWatch full pipeline.
 
-Orchestrates the AWS-native pipeline end to end:
-    generate fresh logs -> Bronze->Silver Glue job -> Silver crawler
-
-The dbt Gold build is added as a fourth task in the next iteration.
-Uses the Airflow 3 TaskFlow API plus the Amazon provider's Glue operators.
+Orchestrates the entire platform end to end:
+    generate logs -> Glue (Bronze->Silver) -> crawler -> dbt build (Gold)
 """
 from __future__ import annotations
 
@@ -16,12 +13,14 @@ from datetime import datetime, timedelta
 from airflow.sdk import dag, task
 from airflow.providers.amazon.aws.operators.glue import GlueJobOperator
 from airflow.providers.amazon.aws.operators.glue_crawler import GlueCrawlerOperator
+from airflow.providers.standard.operators.bash import BashOperator
 
 GLUE_JOB_NAME = "pipelinewatch-bronze-to-silver-dev"
 CRAWLER_NAME = "pipelinewatch-silver-crawler-dev"
 
-# default_args apply to every task in the DAG.
-# retries + retry_delay make the pipeline resilient to transient failures.
+DBT_DIR = "/usr/local/airflow/include/dbt"
+DBT_BIN = "/usr/local/airflow/dbt_venv/bin/dbt"
+
 default_args = {
     "retries": 2,
     "retry_delay": timedelta(minutes=2),
@@ -29,7 +28,7 @@ default_args = {
 
 
 @dag(
-    schedule=None,                 # manual trigger (keeps Glue costs controlled)
+    schedule=None,
     start_date=datetime(2026, 1, 1),
     catchup=False,
     default_args=default_args,
@@ -48,22 +47,31 @@ def pipelinewatch_pipeline():
         run(bucket, events_per_hour=events_per_hour)
         return events_per_hour
 
-    # Trigger the existing Glue job and block until it finishes.
     run_glue = GlueJobOperator(
         task_id="run_glue_job",
         job_name=GLUE_JOB_NAME,
         wait_for_completion=True,
     )
 
-    # Run the crawler to register any new Silver partitions, block until done.
     run_crawler = GlueCrawlerOperator(
         task_id="run_crawler",
         config={"Name": CRAWLER_NAME},
         wait_for_completion=True,
     )
 
-    # Dependency chain: generate -> transform -> catalog
-    generate_logs() >> run_glue >> run_crawler
+    dbt_build = BashOperator(
+        task_id="dbt_build",
+        bash_command=(
+            f"DBT_PROFILES_DIR={DBT_DIR} "
+            f"{DBT_BIN} build "
+            f"--project-dir {DBT_DIR} "
+            f"--log-path /tmp/dbt_logs "
+            f"--target-path /tmp/dbt_target"
+        ),
+    )
+
+    # Full pipeline order: generate -> transform -> catalog -> model
+    generate_logs() >> run_glue >> run_crawler >> dbt_build
 
 
 pipelinewatch_pipeline()
