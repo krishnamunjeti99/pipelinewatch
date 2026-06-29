@@ -30,7 +30,7 @@
 </head>
 <body>
   <h1>PipelineWatch — Analytics Dashboard</h1>
-  <div class="subtitle">Live metrics from the Gold tier · service health, errors, latency, traffic</div>
+  <div class="subtitle">Live metrics from the Gold tier · service health, errors, latency, traffic</div><button onclick="refresh()" style="background:#3b82f6;color:#fff;border:none;padding:8px 16px;border-radius:6px;cursor:pointer;font-size:13px;margin-bottom:20px;">↻ Refresh data</button>
 
   <div class="cards" id="health-cards"></div>
 
@@ -107,6 +107,10 @@ async function load() {
       }
     })
   });
+}
+async function refresh() {
+  await fetch("/api/refresh", { method: "POST" });
+  location.reload();
 }
 load();
 </script>
