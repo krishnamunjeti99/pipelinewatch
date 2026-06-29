@@ -442,3 +442,62 @@ A fact-to-dimension join across the Gold tier (hourly KPIs joined to current use
 - Per-task retries with a delay handle transient failures.
 - Idempotent tasks (dedup on event_id, deterministic transforms) make retries safe.
 - wait_for_completion + dependency ordering prevent downstream tasks running on incomplete data.
+
+## Phase 4 Day 4 debugging — dbt in a container: three stacked failures
+
+1. **mmh3 wheel build failed** ("command 'cc' failed"): the slim Astro image lacked a C
+   compiler. Fix: added build-essential to packages.txt.
+2. **Silent dbt exit code 2**: dbt crashed during logging init (PermissionError: 'logs')
+   because the host-copied project dir (UID 1000) wasn't writable by the container's
+   astro user — and the crash happened before the console logger existed, so NOTHING
+   printed. Diagnosed by calling dbt's cli() via Python with standalone_mode=False to
+   force the traceback. Fix: --log-path /tmp/dbt_logs and --target-path /tmp/dbt_target.
+3. **--profiles-dir rejected as a global flag** in dbt 1.11: used DBT_PROFILES_DIR env var
+   instead. And --target-path is invalid for `debug` (only `build`).
+
+Lesson: when a CLI exits non-zero with zero output, suspect its own logging/output
+init. Bypass by invoking the entrypoint in-process to surface the real exception.
+
+## Phase 4 wrap-up — Orchestration with Airflow
+
+**What I built across Phase 4**
+
+A single Airflow DAG orchestrating the entire platform end to end:
+- Local Airflow 3.x via the Astronomer astro CLI (Docker), free — orchestrating remote AWS services.
+- Four tasks in dependency order: generate_logs (Python) -> run_glue_job (GlueJobOperator) -> run_crawler (GlueCrawlerOperator) -> dbt_build (BashOperator on an isolated dbt venv).
+- Per-task retries (2x, 2-min delay) for resilience; on_failure_callback for alerting.
+- dbt running inside the image in an isolated virtualenv (avoids dependency conflicts), writing logs/target to /tmp (container-writable).
+- One trigger runs the full Bronze -> Silver -> Gold pipeline (~8-12 min).
+
+**Concepts truly locked in**
+- Orchestration solves what manual scripts can't: scheduling, dependency enforcement, retries, monitoring, run history.
+- DAG = directed acyclic graph of tasks; TaskFlow API infers dependencies from data flow.
+- Amazon provider operators (GlueJobOperator, GlueCrawlerOperator) drive AWS declaratively; wait_for_completion blocks until the remote job finishes.
+- Idempotency is the prerequisite for safe retries (dedup on event_id, deterministic transforms).
+- schedule=None vs cron/preset/asset; catchup controls backfilling missed intervals; logical date vs run time.
+- Running dbt in Airflow: isolate it (venv/container/cosmos) to avoid dependency conflicts.
+- Failure callbacks route alerts to Slack/email/PagerDuty in production.
+- Local Airflow orchestrates AWS for free; MWAA is the managed production option (~$350+/mo).
+
+**Hard-won debugging (Day 4)**
+- mmh3 needed a C compiler -> added build-essential to packages.txt.
+- Silent dbt exit 2 = crash during logging init (PermissionError on 'logs' dir, host UID vs container astro user). Crash happened before the console logger existed, so nothing printed. Diagnosed via cli() with standalone_mode=False. Fixed with --log-path/--target-path to /tmp + DBT_PROFILES_DIR.
+- Lesson: a CLI exiting non-zero with zero output -> suspect its own output/logging init; invoke the entrypoint in-process to surface the exception.
+
+**Security lesson**
+- Long-lived admin access keys are a liability (one got exposed during debugging and had to be rotated). Production pattern: short-lived, least-privilege IAM roles (e.g. MWAA execution role) instead of static keys in env vars.
+
+**Interview answers I can now give**
+- "Walk me through orchestrating a pipeline on Airflow" — one DAG, four tasks, dependencies, retries, alerting; Glue via provider operators with wait_for_completion; dbt in an isolated venv.
+- "How do you run dbt in Airflow without dependency conflicts?" — isolated venv + Bash/ExternalPython, a separate container, or astronomer-cosmos.
+- "How do you make a pipeline resilient and observable?" — retries + idempotency, failure callbacks, the UI for logs/history/durations.
+- "Why local Airflow not MWAA?" — cost; local orchestrates the same AWS services for free; MWAA is the managed prod path.
+
+**Phase 4 self-assessment**
+- [ ] I can explain what orchestration adds over manual scripts.
+- [ ] I can write a TaskFlow DAG and explain dependency inference.
+- [ ] I can explain how Airflow drives AWS (provider operators + wait_for_completion).
+- [ ] I can explain retries + idempotency and failure alerting.
+- [ ] I can explain the dbt-in-Airflow isolation problem and three solutions.
+- [ ] I could rebuild and run the whole pipeline from my repo.
+
