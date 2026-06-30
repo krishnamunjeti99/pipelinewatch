@@ -501,3 +501,64 @@ A single Airflow DAG orchestrating the entire platform end to end:
 - [ ] I can explain the dbt-in-Airflow isolation problem and three solutions.
 - [ ] I could rebuild and run the whole pipeline from my repo.
 
+## Phase 6 Day 4 — Polish: auto-env + caching
+
+**What I built:**
+- python-dotenv auto-loads serving/.env on startup (no more manual `set -a; source .env`).
+- In-memory TTL cache (5 min) for the four analytics queries — first load hits Athena, repeat loads are instant.
+- POST /api/refresh to clear the cache on demand; a refresh button on the dashboard.
+
+**Concepts locked in:**
+- Caching trade-off: responsiveness + lower Athena cost vs. data staleness up to the TTL. Fine for a metrics dashboard.
+- Copy cached DataFrames before mutating (adding the label column) so the shared cache stays clean.
+- load_dotenv with an explicit path loads .env regardless of working directory — robust to how the server is launched.
+
+**Interview answers:**
+
+*Q: How did you make the dashboard responsive and cost-efficient?*
+- Cached Gold-mart query results in memory with a short TTL. The first request runs the Athena queries; subsequent requests within the TTL serve cached results — near-instant, and avoids re-billing Athena on every page load.
+- Added a manual refresh endpoint to force fresh data when needed.
+
+*Q: What's the downside of caching, and is it acceptable here?*
+- Data can be up to the TTL stale. For an operational metrics dashboard, minutes-old data is perfectly acceptable, and the responsiveness/cost win is large. For real-time needs you'd shorten the TTL or use a streaming approach.
+
+## Phase 6 wrap-up — Analytics serving layer (FastAPI + Chart.js on Gold)
+
+**What I built across Phase 6**
+
+A live analytics dashboard over the Gold tier:
+- FastAPI backend with a clean three-layer structure: athena.py (connection),
+  queries.py (analytics SQL, one function per business question), main.py (API + page).
+- Four analytics endpoints reading the Gold marts: service health, error-rate trend,
+  latency percentiles, daily active users.
+- A Chart.js dashboard (cards + line + bar + combo charts) served by FastAPI.
+- In-memory TTL caching for responsiveness and lower Athena cost; a manual refresh control.
+- python-dotenv for robust config loading.
+
+**Concepts truly locked in**
+- The serving layer reads pre-aggregated Gold marts, so queries are small, fast, and cheap —
+  the payoff of the whole medallion design.
+- Layer separation (connection / queries / web) keeps the code testable and readable.
+- Caching trade-off: responsiveness + cost vs. staleness up to the TTL; fine for metrics.
+- Copy cached objects before mutating to keep the cache immutable.
+- The dashboard closes the loop end to end: raw Bronze logs become a live business dashboard.
+
+**What this adds to my profile**
+- A visual, insight-focused artifact (not just pipelines) — directly relevant to Data Analyst roles.
+- Demonstrates SQL-for-analytics, metric design, and turning data into at-a-glance insight.
+- Reuses and showcases my FastAPI strength.
+
+**Interview answers I can now give**
+- "Walk me through serving analytics from a lakehouse" — FastAPI queries pre-aggregated Gold
+  marts via Athena, cached with a short TTL, rendered with Chart.js; reads the business layer
+  so queries stay cheap and fast.
+- "How do you balance freshness and performance in a dashboard?" — short-TTL caching; metrics
+  tolerate minutes-old data; manual refresh for on-demand freshness; shorten TTL or stream if
+  real-time is required.
+
+**Phase 6 self-assessment**
+- [ ] I can explain why the dashboard reads Gold, not Silver/Bronze.
+- [ ] I can explain the three-layer app structure and why I separated them.
+- [ ] I can explain the caching trade-off and my TTL choice.
+- [ ] I can walk through the end-to-end flow from browser to Gold marts.
+- [ ] I could demo this live and screenshot it for a portfolio.
