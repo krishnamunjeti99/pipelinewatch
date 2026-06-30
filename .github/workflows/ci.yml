@@ -1,0 +1,68 @@
+name: CI
+
+# Run on every push and pull request to main.
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  # ---- Check 1: Python code quality ----
+  lint-python:
+    name: Lint Python (Ruff)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.12'
+      - name: Install Ruff
+        run: pip install ruff
+      - name: Lint
+        run: ruff check .
+
+  # ---- Check 2: dbt project validity (no warehouse connection) ----
+  validate-dbt:
+    name: Validate dbt project
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.12'
+      - name: Install dbt-athena
+        run: pip install dbt-athena
+      - name: Create CI profile (placeholders — dbt parse does not connect)
+        run: |
+          mkdir -p ~/.dbt
+          cat > ~/.dbt/profiles.yml <<'PROFILE'
+          pipelinewatch:
+            target: ci
+            outputs:
+              ci:
+                type: athena
+                s3_staging_dir: s3://placeholder-bucket/athena-staging/
+                s3_data_dir: s3://placeholder-bucket/gold/
+                region_name: ap-south-1
+                database: awsdatacatalog
+                schema: pipelinewatch_gold
+                threads: 4
+          PROFILE
+      - name: Parse dbt project (validates refs, sources, compilation)
+        working-directory: transformations/dbt
+        run: dbt parse
+
+  # ---- Check 3: Terraform configuration validity ----
+  validate-terraform:
+    name: Validate Terraform
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: hashicorp/setup-terraform@v3
+      - name: Terraform init (no backend, no credentials)
+        working-directory: infra/environments/dev
+        run: terraform init -backend=false
+      - name: Terraform validate
+        working-directory: infra/environments/dev
+        run: terraform validate

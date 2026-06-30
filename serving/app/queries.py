@@ -4,6 +4,7 @@ Analytics queries against the Gold marts.
 Each function answers one business question and returns a DataFrame.
 These read pre-aggregated Gold tables, so they are cheap and fast.
 """
+import pandas as pd
 from app.athena import query
 
 

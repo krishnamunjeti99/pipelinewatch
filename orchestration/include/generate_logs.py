@@ -6,7 +6,6 @@ import random
 import sys
 import uuid
 from datetime import datetime, timedelta, timezone
-from typing import Optional
 
 import boto3
 from faker import Faker
