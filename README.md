@@ -1,5 +1,6 @@
 # PipelineWatch
 ![CI](https://github.com/krishnamunjeti99/pipelinewatch/actions/workflows/ci.yml/badge.svg)
+🔗 **[Live Dashboard](https://krishnamunjeti99.github.io/pipelinewatch/dashboard/)** · 📐 **[System Design](docs/ARCHITECTURE.md)**
 
 **An end-to-end AWS data platform — from raw event logs to a live analytics dashboard.**
 
