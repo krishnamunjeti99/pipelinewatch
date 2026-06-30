@@ -1,4 +1,5 @@
 # PipelineWatch
+![CI](https://github.com/krishnamunjeti99/pipelinewatch/actions/workflows/ci.yml/badge.svg)
 
 **An end-to-end AWS data platform — from raw event logs to a live analytics dashboard.**
 
