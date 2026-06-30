@@ -1,19 +1,19 @@
 [
   {
-    "service": "payments-api",
-    "total_requests": 17760,
-    "total_errors": 3577,
-    "error_rate_pct": 20.14,
-    "avg_p95_latency_ms": 2042.0,
-    "user_events": 17115
-  },
-  {
     "service": "search-api",
     "total_requests": 17804,
     "total_errors": 3585,
     "error_rate_pct": 20.14,
     "avg_p95_latency_ms": 2125.0,
     "user_events": 17142
+  },
+  {
+    "service": "payments-api",
+    "total_requests": 17760,
+    "total_errors": 3577,
+    "error_rate_pct": 20.14,
+    "avg_p95_latency_ms": 2042.0,
+    "user_events": 17115
   },
   {
     "service": "auth-api",
