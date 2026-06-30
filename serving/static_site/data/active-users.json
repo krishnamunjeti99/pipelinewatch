@@ -1,0 +1,17 @@
+[
+  {
+    "event_date": "2026-06-17",
+    "active_users": 25669,
+    "total_requests": 36000
+  },
+  {
+    "event_date": "2026-06-18",
+    "active_users": 28012,
+    "total_requests": 41000
+  },
+  {
+    "event_date": "2026-06-25",
+    "active_users": 10681,
+    "total_requests": 12000
+  }
+]

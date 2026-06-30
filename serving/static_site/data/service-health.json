@@ -1,0 +1,42 @@
+[
+  {
+    "service": "payments-api",
+    "total_requests": 17760,
+    "total_errors": 3577,
+    "error_rate_pct": 20.14,
+    "avg_p95_latency_ms": 2042.0,
+    "user_events": 17115
+  },
+  {
+    "service": "search-api",
+    "total_requests": 17804,
+    "total_errors": 3585,
+    "error_rate_pct": 20.14,
+    "avg_p95_latency_ms": 2125.0,
+    "user_events": 17142
+  },
+  {
+    "service": "auth-api",
+    "total_requests": 17927,
+    "total_errors": 3590,
+    "error_rate_pct": 20.03,
+    "avg_p95_latency_ms": 2071.0,
+    "user_events": 17278
+  },
+  {
+    "service": "user-svc",
+    "total_requests": 17842,
+    "total_errors": 3542,
+    "error_rate_pct": 19.85,
+    "avg_p95_latency_ms": 1946.0,
+    "user_events": 17140
+  },
+  {
+    "service": "notification-svc",
+    "total_requests": 17667,
+    "total_errors": 3432,
+    "error_rate_pct": 19.43,
+    "avg_p95_latency_ms": 2017.0,
+    "user_events": 17035
+  }
+]

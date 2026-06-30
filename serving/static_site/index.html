@@ -1,0 +1,132 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>PipelineWatch — Analytics Dashboard</title>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+         background: #0f1419; color: #e6e6e6; padding: 24px; }
+  h1 { font-size: 22px; font-weight: 700; margin-bottom: 4px; color: #fff; }
+  .subtitle { color: #8b98a5; font-size: 13px; margin-bottom: 6px; }
+  .snapshot { color: #6b7682; font-size: 12px; margin-bottom: 24px; }
+  .cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+           gap: 16px; margin-bottom: 24px; }
+  .card { background: #1a2230; border: 1px solid #2a3441; border-radius: 10px; padding: 18px; }
+  .card .svc { font-size: 14px; font-weight: 600; color: #fff; margin-bottom: 10px; }
+  .card .metric { display: flex; justify-content: space-between; font-size: 13px;
+                  margin: 6px 0; color: #b3bcc6; }
+  .card .metric b { color: #fff; font-weight: 600; }
+  .err-high { color: #ff5c5c !important; }
+  .err-ok { color: #4ade80 !important; }
+  .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+  .panel { background: #1a2230; border: 1px solid #2a3441; border-radius: 10px; padding: 18px; }
+  .panel h2 { font-size: 14px; font-weight: 600; color: #fff; margin-bottom: 14px; }
+  .panel.full { grid-column: 1 / -1; }
+  canvas { max-height: 300px; }
+  .footer { color: #6b7682; font-size: 12px; margin-top: 24px; text-align: center; }
+  .footer a { color: #3b82f6; text-decoration: none; }
+  @media (max-width: 800px) { .grid { grid-template-columns: 1fr; } }
+</style>
+</head>
+<body>
+  <h1>PipelineWatch — Analytics Dashboard</h1>
+  <div class="subtitle">Service health, errors, latency, and traffic — from a medallion lakehouse (Bronze → Silver → Gold).</div>
+  <div class="snapshot" id="snapshot">Loading…</div>
+
+  <div class="cards" id="health-cards"></div>
+
+  <div class="grid">
+    <div class="panel"><h2>Error Rate Trend (hourly)</h2><canvas id="errorChart"></canvas></div>
+    <div class="panel"><h2>Latency Percentiles by Service (ms)</h2><canvas id="latencyChart"></canvas></div>
+    <div class="panel full"><h2>Daily Active Users & Requests</h2><canvas id="usersChart"></canvas></div>
+  </div>
+
+  <div class="footer">
+    Static snapshot of analytics produced by the PipelineWatch pipeline ·
+    <a href="https://github.com/krishnamunjeti99/pipelinewatch">source on GitHub</a>
+  </div>
+
+<script>
+const GRID = "#2a3441", TICK = "#8b98a5";
+const chartOpts = (extra={}) => ({
+  responsive: true,
+  plugins: { legend: { labels: { color: "#b3bcc6", font: { size: 11 } } } },
+  scales: {
+    x: { ticks: { color: TICK, font: { size: 10 } }, grid: { color: GRID } },
+    y: { ticks: { color: TICK, font: { size: 10 } }, grid: { color: GRID }, beginAtZero: true }
+  },
+  ...extra
+});
+
+const get = async (name) => (await fetch(`data/${name}.json`)).json();
+
+async function load() {
+  // Snapshot timestamp
+  try {
+    const meta = await get("meta");
+    const d = new Date(meta.generated_at);
+    document.getElementById("snapshot").textContent =
+      "Snapshot generated " + d.toUTCString();
+  } catch { document.getElementById("snapshot").textContent = ""; }
+
+  // Service health cards
+  const health = await get("service-health");
+  document.getElementById("health-cards").innerHTML = health.map(s => `
+    <div class="card">
+      <div class="svc">${s.service}</div>
+      <div class="metric"><span>Requests</span><b>${Number(s.total_requests).toLocaleString()}</b></div>
+      <div class="metric"><span>Error rate</span><b class="${s.error_rate_pct > 10 ? 'err-high' : 'err-ok'}">${s.error_rate_pct}%</b></div>
+      <div class="metric"><span>P95 latency</span><b>${Number(s.avg_p95_latency_ms).toLocaleString()} ms</b></div>
+    </div>`).join("");
+
+  // Error rate trend
+  const trend = await get("error-trend");
+  new Chart(document.getElementById("errorChart"), {
+    type: "line",
+    data: { labels: trend.map(r => r.label),
+      datasets: [{ label: "Error rate %", data: trend.map(r => r.error_rate_pct),
+        borderColor: "#ff5c5c", backgroundColor: "rgba(255,92,92,0.1)",
+        fill: true, tension: 0.3, pointRadius: 0, borderWidth: 2 }] },
+    options: chartOpts()
+  });
+
+  // Latency percentiles
+  const lat = await get("latency");
+  new Chart(document.getElementById("latencyChart"), {
+    type: "bar",
+    data: { labels: lat.map(r => r.service),
+      datasets: [
+        { label: "P50", data: lat.map(r => r.p50), backgroundColor: "#4ade80" },
+        { label: "P95", data: lat.map(r => r.p95), backgroundColor: "#fbbf24" },
+        { label: "P99", data: lat.map(r => r.p99), backgroundColor: "#ff5c5c" },
+      ] },
+    options: chartOpts()
+  });
+
+  // Active users + requests
+  const users = await get("active-users");
+  new Chart(document.getElementById("usersChart"), {
+    data: { labels: users.map(r => r.event_date),
+      datasets: [
+        { type: "bar", label: "Active users", data: users.map(r => r.active_users),
+          backgroundColor: "#3b82f6", yAxisID: "y" },
+        { type: "line", label: "Total requests", data: users.map(r => r.total_requests),
+          borderColor: "#fbbf24", backgroundColor: "transparent", tension: 0.3,
+          borderWidth: 2, yAxisID: "y1" },
+      ] },
+    options: chartOpts({
+      scales: {
+        x: { ticks: { color: TICK }, grid: { color: GRID } },
+        y: { position: "left", ticks: { color: TICK }, grid: { color: GRID }, beginAtZero: true },
+        y1: { position: "right", ticks: { color: TICK }, grid: { drawOnChartArea: false }, beginAtZero: true },
+      }
+    })
+  });
+}
+load();
+</script>
+</body>
+</html>
